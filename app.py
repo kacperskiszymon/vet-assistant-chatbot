@@ -11,96 +11,62 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # GODZINY OTWARCIA
 OPENING_HOURS = {
-    0: ("08:00", "18:00"),  # poniedziałek
-    1: ("08:00", "18:00"),  # wtorek
-    2: ("08:00", "18:00"),  # środa
-    3: ("08:00", "18:00"),  # czwartek
-    4: ("08:00", "16:00"),  # piątek
-    5: ("08:00", "13:00"),  # sobota
-    6: None                 # niedziela – zamknięte
+    0: ("08:00", "18:00"),
+    1: ("08:00", "18:00"),
+    2: ("08:00", "18:00"),
+    3: ("08:00", "18:00"),
+    4: ("08:00", "16:00"),
+    5: ("08:00", "13:00"),
+    6: None
 }
 
 def get_time_context():
     now = datetime.now()
-    day = now.weekday()
+    weekday = now.weekday()
     time_now = now.strftime("%H:%M")
+    hour = now.hour
 
-    if OPENING_HOURS[day] is None:
-        return "SUNDAY", time_now
+    greeting = "Dzień dobry" if 6 <= hour < 18 else "Dobry wieczór"
 
-    open_time, close_time = OPENING_HOURS[day]
-    if open_time <= time_now <= close_time:
-        return "OPEN", time_now
-    return "CLOSED", time_now
+    if OPENING_HOURS[weekday] is None:
+        status = "SUNDAY"
+    else:
+        open_t, close_t = OPENING_HOURS[weekday]
+        status = "OPEN" if open_t <= time_now <= close_t else "CLOSED"
+
+    return greeting, status, time_now
 
 
 SYSTEM_PROMPT_BASE = """
-Jesteś inteligentnym Asystentem Przychodni Weterynaryjnej działającym w trybie demonstracyjnym.
+Jesteś inteligentnym Asystentem Przychodni Weterynaryjnej (wersja demonstracyjna).
 
-WAŻNE:
-- NIE jesteś lekarzem
-- NIE stawiasz diagnoz
-- NIE podajesz nazw leków ani dawek
-- NIE wykonujesz zabiegów
+ZASADY KLUCZOWE:
+- POWITANIE JEST TYLKO JEDNO NA ROZMOWĘ
+- jeśli użytkownik napisze: „witaj”, „dzień dobry”, „dobry wieczór”
+  odpowiedz krótko i przejdź do pomocy
+- NIE powtarzaj pełnego powitania
 
-WOLNO CI:
-- logicznie rozumować
-- wyjaśniać OGÓLNIE, czym jest opisywany problem (edukacyjnie)
-- tłumaczyć, dlaczego samodzielne leczenie może zaszkodzić
-- prowadzić rozmowę jak doświadczona recepcja, nie automat
+NIE WOLNO:
+- stawiać diagnoz
+- podawać nazw leków ani dawek
+- sugerować leczenia na własną rękę
 
-ZASADY ROZMOWY:
-- NIE powtarzaj w kółko tych samych zdań
-- jeśli użytkownik dopytuje „co robić” – ROZWIŃ odpowiedź
-- reaguj adekwatnie do treści pytania
-- dostosuj odpowiedź do pory dnia i godzin pracy
-- podawaj AKTUALNĄ GODZINĘ, jeśli gabinet jest zamknięty
+WOLNO:
+- ogólnie wyjaśniać, czym jest opisywany problem
+- tłumaczyć, dlaczego samodzielne leczenie może pogorszyć sytuację
+- reagować empatycznie i różnicować odpowiedzi
 
 STYL:
 - spokojny
 - ludzki
 - wspierający
 - bez straszenia
-- bez formułek
+- bez automatycznych formułek
 
-Jeśli pytanie dotyczy:
-- szczepień, cen, terminów → poinformuj, że w wersji demo brak szczegółowych danych
-- problemów zdrowotnych → edukuj ogólnie, nie diagnozuj
-
-Twoim celem jest, aby rozmowa brzmiała jak rozmowa z mądrą,
-doświadczoną recepcją weterynaryjną.
-"""
-
-SUNDAY_RULES = """
-Dziś jest niedziela, gabinet jest nieczynny.
-
-Twoja odpowiedź powinna:
-- wyraźnie uspokajać właściciela
-- zalecać spokój, ciszę i brak stresu dla zwierzęcia
-- NIE zalecać karmienia na siłę
-- podkreślać znaczenie stałego dostępu do świeżej wody
-- poinformować, że sprawa zostanie omówiona po otwarciu gabinetu
-"""
-
-CLOSED_RULES = """
-Gabinet jest obecnie zamknięty.
-
-Twoja odpowiedź powinna:
-- poinformować o aktualnej godzinie
-- jasno powiedzieć, że gabinet jest nieczynny
-- uspokoić właściciela
-- zalecić spokój, ciszę i obserwację zwierzęcia
-- NIE zalecać leczenia na własną rękę
-- zasugerować kontakt po otwarciu gabinetu
-"""
-
-OPEN_RULES = """
-Gabinet jest obecnie czynny.
-
-Twoja odpowiedź powinna:
-- być spokojna i rzeczowa
-- naturalnie zasugerować możliwość kontaktu z personelem
-- NIE wywierać presji
+W SYTUACJACH STRESOWYCH:
+- nazwij emocje („rozumiem, że to trudne”)
+- zaproponuj chwilę spokojnego, głębokiego oddechu
+- zachęć do zachowania spokoju
 """
 
 
@@ -112,31 +78,38 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
-    message = data.get("message", "").strip()
+    message = data.get("message", "").strip().lower()
 
-    if not message:
+    greeting, status, current_time = get_time_context()
+
+    # PIERWSZA WIADOMOŚĆ (frontend wysyła pusty string)
+    if message == "":
         return jsonify({
-            "reply": "Witaj, jestem Asystentem Przychodni. Jak mogę pomóc?"
+            "reply": f"{greeting}, jestem Asystentem Przychodni Weterynaryjnej. Jak mogę pomóc?"
         })
 
-    time_context, current_time = get_time_context()
-
-    system_prompt = SYSTEM_PROMPT_BASE
-
-    if time_context == "SUNDAY":
-        system_prompt += f"\nAktualna godzina: {current_time}\n" + SUNDAY_RULES
-    elif time_context == "CLOSED":
-        system_prompt += f"\nAktualna godzina: {current_time}\n" + CLOSED_RULES
-    else:
-        system_prompt += OPEN_RULES
+    status_info = ""
+    if status in ["CLOSED", "SUNDAY"]:
+        status_info = (
+            f"\nJest godzina {current_time}, gabinet jest obecnie zamknięty. "
+            "Rozumiem, że to może być trudne — spróbujmy na chwilę wziąć spokojny, głęboki oddech. "
+            "Na teraz najważniejszy jest spokój i obserwacja zwierzęcia. "
+            "Zapewnij dostęp do świeżej wody i skontaktuj się z gabinetem po otwarciu."
+        )
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": message}
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT_BASE + status_info
+            },
+            {
+                "role": "user",
+                "content": message
+            }
         ],
-        temperature=0.35
+        temperature=0.4
     )
 
     reply = completion.choices[0].message.content
