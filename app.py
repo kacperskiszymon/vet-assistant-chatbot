@@ -9,15 +9,18 @@ CORS(app)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# --- DEMO STORAGE (w pamięci) ---
+CONTACT_REQUESTS = []
+
 # GODZINY OTWARCIA
 OPENING_HOURS = {
-    0: ("08:00", "18:00"),  # poniedziałek
-    1: ("08:00", "18:00"),  # wtorek
-    2: ("08:00", "18:00"),  # środa
-    3: ("08:00", "18:00"),  # czwartek
-    4: ("08:00", "16:00"),  # piątek
-    5: ("08:00", "13:00"),  # sobota
-    6: None                 # niedziela – zamknięte
+    0: ("08:00", "18:00"),
+    1: ("08:00", "18:00"),
+    2: ("08:00", "18:00"),
+    3: ("08:00", "18:00"),
+    4: ("08:00", "16:00"),
+    5: ("08:00", "13:00"),
+    6: None
 }
 
 def get_time_context():
@@ -37,38 +40,20 @@ def get_time_context():
     return greeting, status, time_now
 
 
-SYSTEM_PROMPT_BASE = """
+SYSTEM_PROMPT = """
 Jesteś inteligentnym Asystentem Przychodni Weterynaryjnej (wersja demonstracyjna).
 
-ZASADY KLUCZOWE:
-- POWITANIE JEST TYLKO JEDNO NA ROZMOWĘ
-- jeśli użytkownik napisze: „witaj”, „dzień dobry”, „dobry wieczór”
-  odpowiedz krótko i przejdź do pomocy
-- NIE powtarzaj pełnego powitania
+ZASADY:
+- mów spokojnie i po ludzku
+- NIE stawiaj diagnoz
+- NIE podawaj leków
+- możesz przyjąć dane kontaktowe właściciela
+- ZAWSZE jasno informuj, że rozmowa zostanie przekazana do przychodni
 
-NIE WOLNO:
-- stawiać diagnoz
-- podawać nazw leków ani dawek
-- sugerować leczenia na własną rękę
-
-WOLNO:
-- ogólnie wyjaśniać, czym jest opisywany problem
-- tłumaczyć, dlaczego samodzielne leczenie może pogorszyć sytuację
-- reagować empatycznie i różnicować odpowiedzi
-
-STYL:
-- spokojny
-- ludzki
-- wspierający
-- bez straszenia
-- bez automatycznych formułek
-
-W SYTUACJACH STRESOWYCH:
-- nazwij emocje („rozumiem, że to trudne”)
-- zaproponuj chwilę spokojnego, głębokiego oddechu
-- zachęć do zachowania spokoju
+Jeśli użytkownik chce zostawić kontakt:
+- poproś o imię i numer telefonu lub e-mail
+- potwierdź, że dane zostaną przekazane personelowi
 """
-
 
 @app.route("/")
 def index():
@@ -78,43 +63,61 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
-    message_raw = data.get("message", "")
-    message = message_raw.strip().lower()
+    message = data.get("message", "").strip()
 
     greeting, status, current_time = get_time_context()
+    msg_lower = message.lower()
 
-    # TECHNICZNY START ROZMOWY (wysyłany przez frontend)
-    if message == "__start__":
+    # START ROZMOWY
+    if msg_lower == "__start__":
         return jsonify({
             "reply": f"{greeting}, jestem Asystentem Przychodni Weterynaryjnej. Jak mogę pomóc?"
         })
 
+    # INTENCJA: ZOSTAWIENIE KONTAKTU
+    if any(kw in msg_lower for kw in ["kontakt", "numer", "telefon", "email", "e-mail", "skontaktujecie"]):
+        return jsonify({
+            "reply": (
+                "Oczywiście. Proszę podać imię oraz numer telefonu lub adres e-mail. "
+                "Ta rozmowa zostanie przekazana do przychodni, a pracownik skontaktuje się z Tobą, "
+                "gdy tylko będzie to możliwe."
+            )
+        })
+
+    # WYKRYCIE DANYCH KONTAKTOWYCH (proste demo)
+    if any(char.isdigit() for char in message) or "@" in message:
+        CONTACT_REQUESTS.append({
+            "time": datetime.now().isoformat(),
+            "contact": message
+        })
+        return jsonify({
+            "reply": (
+                "Dziękuję. Dane kontaktowe zostały zapisane. "
+                "Rozmowa zostanie przekazana do przychodni i pracownik skontaktuje się z Tobą, "
+                "gdy tylko będzie to możliwe."
+            )
+        })
+
+    # INFO O ZAMKNIĘCIU
     status_info = ""
     if status in ["CLOSED", "SUNDAY"]:
         status_info = (
-            f"\nJest godzina {current_time}, gabinet jest obecnie zamknięty. "
-            "Rozumiem, że to może być trudne — spróbujmy na chwilę wziąć spokojny, głęboki oddech. "
-            "Na teraz najważniejszy jest spokój i uważna obserwacja zwierzęcia. "
-            "Zapewnij dostęp do świeżej wody i skontaktuj się z gabinetem po otwarciu."
+            f"Jest godzina {current_time}, przychodnia jest obecnie zamknięta. "
+            "Rozumiem, że to bardzo stresujące — spróbujmy na chwilę wziąć spokojny, głęboki oddech. "
+            "Na teraz najważniejszy jest spokój, ograniczenie ruchu zwierzęcia i dostęp do świeżej wody. "
         )
 
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT_BASE + status_info
-            },
-            {
-                "role": "user",
-                "content": message_raw
-            }
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "assistant", "content": status_info},
+            {"role": "user", "content": message}
         ],
         temperature=0.4
     )
 
-    reply = completion.choices[0].message.content
-    return jsonify({"reply": reply})
+    return jsonify({"reply": completion.choices[0].message.content})
 
 
 if __name__ == "__main__":
