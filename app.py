@@ -9,10 +9,15 @@ CORS(app)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# --- DEMO STORAGE (w pamięci) ---
-CONTACT_REQUESTS = []
+# ====== DEMO PAMIĘĆ ======
+USER_STATE = {}        # ip -> state
+CONTACT_REQUESTS = []  # zapisane kontakty
 
-# GODZINY OTWARCIA
+STATE_NORMAL = "NORMAL"
+STATE_WAITING_CONTACT = "WAITING_CONTACT"
+STATE_CONTACT_SAVED = "CONTACT_SAVED"
+
+# ====== GODZINY OTWARCIA ======
 OPENING_HOURS = {
     0: ("08:00", "18:00"),
     1: ("08:00", "18:00"),
@@ -41,18 +46,18 @@ def get_time_context():
 
 
 SYSTEM_PROMPT = """
-Jesteś inteligentnym Asystentem Przychodni Weterynaryjnej (wersja demonstracyjna).
+Jesteś Asystentem Przychodni Weterynaryjnej.
 
-ZASADY:
-- mów spokojnie i po ludzku
+ZASADY BEZWZGLĘDNE:
+- nie powtarzaj w kółko tych samych pytań
+- jeśli użytkownik podał dane kontaktowe — POTWIERDŹ I ZAKOŃCZ TEMAT
+- mów spokojnie, empatycznie i po ludzku
 - NIE stawiaj diagnoz
 - NIE podawaj leków
-- możesz przyjąć dane kontaktowe właściciela
-- ZAWSZE jasno informuj, że rozmowa zostanie przekazana do przychodni
 
-Jeśli użytkownik chce zostawić kontakt:
-- poproś o imię i numer telefonu lub e-mail
-- potwierdź, że dane zostaną przekazane personelowi
+Jeśli użytkownik opisuje uraz:
+- nazwij emocje
+- zalecaj spokój, ograniczenie ruchu, wodę
 """
 
 @app.route("/")
@@ -62,43 +67,58 @@ def index():
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    user_ip = request.remote_addr
     data = request.json
     message = data.get("message", "").strip()
+    msg_lower = message.lower()
 
     greeting, status, current_time = get_time_context()
-    msg_lower = message.lower()
+
+    # Inicjalizacja stanu
+    if user_ip not in USER_STATE:
+        USER_STATE[user_ip] = STATE_NORMAL
 
     # START ROZMOWY
     if msg_lower == "__start__":
+        USER_STATE[user_ip] = STATE_NORMAL
         return jsonify({
             "reply": f"{greeting}, jestem Asystentem Przychodni Weterynaryjnej. Jak mogę pomóc?"
         })
 
-    # INTENCJA: ZOSTAWIENIE KONTAKTU
+    # ====== TRYB OCZEKIWANIA NA KONTAKT ======
+    if USER_STATE[user_ip] == STATE_WAITING_CONTACT:
+        if any(char.isdigit() for char in message) or "@" in message:
+            CONTACT_REQUESTS.append({
+                "ip": user_ip,
+                "time": datetime.now().isoformat(),
+                "contact": message
+            })
+            USER_STATE[user_ip] = STATE_CONTACT_SAVED
+            return jsonify({
+                "reply": (
+                    "Dziękuję, dane kontaktowe zostały zapisane. "
+                    "Rozmowa zostanie przekazana do przychodni, a pracownik "
+                    "skontaktuje się z Tobą, gdy tylko będzie to możliwe. "
+                    "Jeśli chcesz, możesz jeszcze spokojnie opisać sytuację zwierzęcia."
+                )
+            })
+        else:
+            return jsonify({
+                "reply": "Proszę podać numer telefonu lub adres e-mail, abym mógł przekazać kontakt do przychodni."
+            })
+
+    # ====== INTENCJA ZOSTAWIENIA KONTAKTU ======
     if any(kw in msg_lower for kw in ["kontakt", "numer", "telefon", "email", "e-mail", "skontaktujecie"]):
+        USER_STATE[user_ip] = STATE_WAITING_CONTACT
         return jsonify({
             "reply": (
-                "Oczywiście. Proszę podać imię oraz numer telefonu lub adres e-mail. "
+                "Oczywiście. Proszę podać numer telefonu lub adres e-mail. "
                 "Ta rozmowa zostanie przekazana do przychodni, a pracownik skontaktuje się z Tobą, "
                 "gdy tylko będzie to możliwe."
             )
         })
 
-    # WYKRYCIE DANYCH KONTAKTOWYCH (proste demo)
-    if any(char.isdigit() for char in message) or "@" in message:
-        CONTACT_REQUESTS.append({
-            "time": datetime.now().isoformat(),
-            "contact": message
-        })
-        return jsonify({
-            "reply": (
-                "Dziękuję. Dane kontaktowe zostały zapisane. "
-                "Rozmowa zostanie przekazana do przychodni i pracownik skontaktuje się z Tobą, "
-                "gdy tylko będzie to możliwe."
-            )
-        })
-
-    # INFO O ZAMKNIĘCIU
+    # ====== INFO O ZAMKNIĘCIU ======
     status_info = ""
     if status in ["CLOSED", "SUNDAY"]:
         status_info = (
@@ -107,6 +127,7 @@ def chat():
             "Na teraz najważniejszy jest spokój, ograniczenie ruchu zwierzęcia i dostęp do świeżej wody. "
         )
 
+    # ====== ODPOWIEDŹ AI ======
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
