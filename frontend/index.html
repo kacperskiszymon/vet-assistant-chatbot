@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Asystent Gabinetu Weterynaryjnego</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="vet-chat-widget">
+  <button id="vet-chat-toggle">🐾</button>
+
+  <div id="vet-chat-window">
+    <div class="header">
+      Asystent Gabinetu Weterynaryjnego
+    </div>
+
+    <div id="vet-chat-messages">
+      <div class="bot">
+        Witaj, jestem Asystentem Przychodni. Jak mogę pomóc?
+      </div>
+    </div>
+
+    <div class="input-area">
+      <input
+        type="text"
+        id="vet-input"
+        placeholder="W czym mogę pomóc?"
+      />
+      <button id="vet-send">Wyślij</button>
+    </div>
+  </div>
+</div>
+
+<script src="chatbot.js"></script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+body {
+  font-family: Arial, sans-serif;
+}
+
+/* CAŁY WIDGET */
+#vet-chat-widget {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9999;
+}
+
+/* KÓŁKO Z ŁAPKĄ */
+#vet-chat-toggle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: #2e7d32; /* spokojna zieleń */
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+/* OKNO CHATU – NAD ŁAPKĄ */
+#vet-chat-window {
+  position: absolute;
+  bottom: 70px;
+  right: 0;
+  width: 320px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  overflow: hidden;
+  display: none;
+}
+
+/* GÓRNY PASEK */
+.header {
+  background: #388e3c;
+  color: white;
+  padding: 12px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+/* OBSZAR WIADOMOŚCI */
+#vet-chat-messages {
+  height: 240px;
+  padding: 10px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+/* WIADOMOŚĆ BOT */
+.bot {
+  background: #e8f5e9;
+  padding: 8px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+}
+
+/* WIADOMOŚĆ UŻYTKOWNIK */
+.user {
+  background: #c8e6c9;
+  padding: 8px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  text-align: right;
+}
+
+/* INPUT */
+.input-area {
+  display: flex;
+  border-top: 1px solid #ddd;
+}
+
+.input-area input {
+  flex: 1;
+  border: none;
+  padding: 10px;
+  outline: none;
+}
+
+.input-area button {
+  border: none;
+  background: #2e7d32;
+  color: white;
+  padding: 10px 14px;
+  cursor: pointer;
+}
