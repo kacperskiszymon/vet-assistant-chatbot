@@ -11,13 +11,13 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # GODZINY OTWARCIA
 OPENING_HOURS = {
-    0: ("08:00", "18:00"),
-    1: ("08:00", "18:00"),
-    2: ("08:00", "18:00"),
-    3: ("08:00", "18:00"),
-    4: ("08:00", "16:00"),
-    5: ("08:00", "13:00"),
-    6: None
+    0: ("08:00", "18:00"),  # poniedziałek
+    1: ("08:00", "18:00"),  # wtorek
+    2: ("08:00", "18:00"),  # środa
+    3: ("08:00", "18:00"),  # czwartek
+    4: ("08:00", "16:00"),  # piątek
+    5: ("08:00", "13:00"),  # sobota
+    6: None                 # niedziela – zamknięte
 }
 
 def get_time_context():
@@ -78,12 +78,13 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     data = request.json
-    message = data.get("message", "").strip().lower()
+    message_raw = data.get("message", "")
+    message = message_raw.strip().lower()
 
     greeting, status, current_time = get_time_context()
 
-    # PIERWSZA WIADOMOŚĆ (frontend wysyła pusty string)
-    if message == "":
+    # TECHNICZNY START ROZMOWY (wysyłany przez frontend)
+    if message == "__start__":
         return jsonify({
             "reply": f"{greeting}, jestem Asystentem Przychodni Weterynaryjnej. Jak mogę pomóc?"
         })
@@ -93,7 +94,7 @@ def chat():
         status_info = (
             f"\nJest godzina {current_time}, gabinet jest obecnie zamknięty. "
             "Rozumiem, że to może być trudne — spróbujmy na chwilę wziąć spokojny, głęboki oddech. "
-            "Na teraz najważniejszy jest spokój i obserwacja zwierzęcia. "
+            "Na teraz najważniejszy jest spokój i uważna obserwacja zwierzęcia. "
             "Zapewnij dostęp do świeżej wody i skontaktuj się z gabinetem po otwarciu."
         )
 
@@ -106,7 +107,7 @@ def chat():
             },
             {
                 "role": "user",
-                "content": message
+                "content": message_raw
             }
         ],
         temperature=0.4

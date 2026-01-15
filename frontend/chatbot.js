@@ -4,9 +4,17 @@ const sendBtn = document.getElementById("vet-send");
 const input = document.getElementById("vet-input");
 const messages = document.getElementById("vet-chat-messages");
 
+let conversationStarted = false;
+
 toggle.addEventListener("click", () => {
-  windowChat.style.display =
-    windowChat.style.display === "block" ? "none" : "block";
+  const isOpen = windowChat.style.display === "block";
+  windowChat.style.display = isOpen ? "none" : "block";
+
+  // START ROZMOWY – TYLKO RAZ
+  if (!conversationStarted && !isOpen) {
+    conversationStarted = true;
+    startConversation();
+  }
 });
 
 sendBtn.addEventListener("click", sendMessage);
@@ -14,6 +22,22 @@ sendBtn.addEventListener("click", sendMessage);
 input.addEventListener("keypress", (e) => {
   if (e.key === "Enter") sendMessage();
 });
+
+async function startConversation() {
+  try {
+    const response = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "__START__" })
+    });
+
+    const data = await response.json();
+    messages.innerHTML += `<div class="bot">${data.reply}</div>`;
+    messages.scrollTop = messages.scrollHeight;
+  } catch (error) {
+    console.error("Start conversation error:", error);
+  }
+}
 
 async function sendMessage() {
   const text = input.value.trim();
