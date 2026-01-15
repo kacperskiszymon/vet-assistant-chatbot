@@ -3,19 +3,20 @@ from flask_cors import CORS
 from openai import OpenAI
 import os
 from datetime import datetime
+import re
 
 app = Flask(__name__, static_folder="frontend", static_url_path="")
 CORS(app)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ====== DEMO PAMIĘĆ ======
-USER_STATE = {}        # ip -> state
-CONTACT_REQUESTS = []  # zapisane kontakty
-
+# ====== STANY ======
 STATE_NORMAL = "NORMAL"
 STATE_WAITING_CONTACT = "WAITING_CONTACT"
 STATE_CONTACT_SAVED = "CONTACT_SAVED"
+
+USER_STATE = {}
+CONTACT_REQUESTS = []
 
 # ====== GODZINY OTWARCIA ======
 OPENING_HOURS = {
@@ -33,37 +34,30 @@ def get_time_context():
     weekday = now.weekday()
     time_now = now.strftime("%H:%M")
     hour = now.hour
-
     greeting = "Dzień dobry" if 6 <= hour < 18 else "Dobry wieczór"
 
     if OPENING_HOURS[weekday] is None:
-        status = "SUNDAY"
+        status = "CLOSED"
     else:
         open_t, close_t = OPENING_HOURS[weekday]
         status = "OPEN" if open_t <= time_now <= close_t else "CLOSED"
 
     return greeting, status, time_now
 
+def contains_contact(text):
+    email = re.search(r"\S+@\S+\.\S+", text)
+    phone = re.search(r"\d{3}[\s\-]?\d{3}[\s\-]?\d{3}", text)
+    return bool(email or phone)
 
 SYSTEM_PROMPT = """
 Jesteś Asystentem Przychodni Weterynaryjnej.
-
-ZASADY BEZWZGLĘDNE:
-- nie powtarzaj w kółko tych samych pytań
-- jeśli użytkownik podał dane kontaktowe — POTWIERDŹ I ZAKOŃCZ TEMAT
-- mów spokojnie, empatycznie i po ludzku
-- NIE stawiaj diagnoz
-- NIE podawaj leków
-
-Jeśli użytkownik opisuje uraz:
-- nazwij emocje
-- zalecaj spokój, ograniczenie ruchu, wodę
+Mów spokojnie, empatycznie, jak do człowieka.
+NIE pytaj ponownie o dane kontaktowe, jeśli zostały zapisane.
 """
 
 @app.route("/")
 def index():
     return send_from_directory("frontend", "index.html")
-
 
 @app.route("/chat", methods=["POST"])
 def chat():
@@ -74,20 +68,32 @@ def chat():
 
     greeting, status, current_time = get_time_context()
 
-    # Inicjalizacja stanu
     if user_ip not in USER_STATE:
         USER_STATE[user_ip] = STATE_NORMAL
 
-    # START ROZMOWY
+    # START
     if msg_lower == "__start__":
         USER_STATE[user_ip] = STATE_NORMAL
         return jsonify({
             "reply": f"{greeting}, jestem Asystentem Przychodni Weterynaryjnej. Jak mogę pomóc?"
         })
 
-    # ====== TRYB OCZEKIWANIA NA KONTAKT ======
+    # ====== KONTAKT JUŻ ZAPISANY — BLOKADA AI ======
+    if USER_STATE[user_ip] == STATE_CONTACT_SAVED:
+        return jsonify({
+            "reply": (
+                "Masz rację — zapisałem Twoje dane kontaktowe. "
+                "Przepraszam, że wcześniej dopytywałem. "
+                "Rozmowa została przekazana do przychodni i pracownik "
+                "skontaktuje się z Tobą, gdy tylko będzie to możliwe. "
+                "Jeśli chcesz, możemy teraz spokojnie skupić się na tym, "
+                "jak najlepiej zadbać o zwierzę do czasu wizyty."
+            )
+        })
+
+    # ====== OCZEKIWANIE NA KONTAKT ======
     if USER_STATE[user_ip] == STATE_WAITING_CONTACT:
-        if any(char.isdigit() for char in message) or "@" in message:
+        if contains_contact(message):
             CONTACT_REQUESTS.append({
                 "ip": user_ip,
                 "time": datetime.now().isoformat(),
@@ -96,38 +102,35 @@ def chat():
             USER_STATE[user_ip] = STATE_CONTACT_SAVED
             return jsonify({
                 "reply": (
-                    "Dziękuję, dane kontaktowe zostały zapisane. "
-                    "Rozmowa zostanie przekazana do przychodni, a pracownik "
-                    "skontaktuje się z Tobą, gdy tylko będzie to możliwe. "
-                    "Jeśli chcesz, możesz jeszcze spokojnie opisać sytuację zwierzęcia."
+                    "Dziękuję, zapisałem Twoje dane kontaktowe. "
+                    "Rozmowa została przekazana do przychodni. "
+                    "Pracownik skontaktuje się z Tobą, gdy tylko będzie to możliwe."
                 )
             })
         else:
             return jsonify({
-                "reply": "Proszę podać numer telefonu lub adres e-mail, abym mógł przekazać kontakt do przychodni."
+                "reply": "Proszę podać numer telefonu lub adres e-mail."
             })
 
     # ====== INTENCJA ZOSTAWIENIA KONTAKTU ======
-    if any(kw in msg_lower for kw in ["kontakt", "numer", "telefon", "email", "e-mail", "skontaktujecie"]):
+    if any(k in msg_lower for k in ["kontakt", "numer", "telefon", "email", "e-mail", "umówić"]):
         USER_STATE[user_ip] = STATE_WAITING_CONTACT
         return jsonify({
             "reply": (
-                "Oczywiście. Proszę podać numer telefonu lub adres e-mail. "
-                "Ta rozmowa zostanie przekazana do przychodni, a pracownik skontaktuje się z Tobą, "
-                "gdy tylko będzie to możliwe."
+                "Rozumiem. Proszę podać numer telefonu lub adres e-mail. "
+                "Rozmowa zostanie przekazana do przychodni."
             )
         })
 
-    # ====== INFO O ZAMKNIĘCIU ======
+    # ====== NORMALNA ODPOWIEDŹ AI ======
     status_info = ""
-    if status in ["CLOSED", "SUNDAY"]:
+    if status == "CLOSED":
         status_info = (
-            f"Jest godzina {current_time}, przychodnia jest obecnie zamknięta. "
-            "Rozumiem, że to bardzo stresujące — spróbujmy na chwilę wziąć spokojny, głęboki oddech. "
-            "Na teraz najważniejszy jest spokój, ograniczenie ruchu zwierzęcia i dostęp do świeżej wody. "
+            f"Jest godzina {current_time}. Przychodnia jest obecnie zamknięta. "
+            "Rozumiem, że to trudne — weźmy spokojny, głęboki oddech. "
+            "Na teraz najważniejszy jest spokój, ograniczenie ruchu i woda."
         )
 
-    # ====== ODPOWIEDŹ AI ======
     completion = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -135,11 +138,10 @@ def chat():
             {"role": "assistant", "content": status_info},
             {"role": "user", "content": message}
         ],
-        temperature=0.4
+        temperature=0.35
     )
 
     return jsonify({"reply": completion.choices[0].message.content})
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
