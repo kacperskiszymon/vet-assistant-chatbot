@@ -5,93 +5,99 @@
   const API_BASE = "https://vet-assistant-chatbot.onrender.com";
 
   // =====================================================
-  // 1. TWORZENIE HTML WIDGETU (JEŚLI NIE ISTNIEJE)
+  // 1. TWORZENIE HTML (POZYCJONOWANIE FIXED)
   // =====================================================
-  if (!document.getElementById("vet-chat-widget")) {
-    const wrapper = document.createElement("div");
-    wrapper.innerHTML = `
-      <div id="vet-chat-widget" style="
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        z-index: 99999;
-      ">
-        <button
-          id="vet-chat-toggle"
-          style="
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            border: none;
-            background: #2e7d32;
-            color: #fff;
-            font-size: 26px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            line-height: 1;
-            padding: 0;
-          "
-        >🐾</button>
+  if (!document.getElementById("vet-chat-toggle")) {
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `
+      <!-- TOGGLE -->
+      <button
+        id="vet-chat-toggle"
+        style="
+          position: fixed;
+          bottom: 20px;
+          right: 20px;
+          width: 56px;
+          height: 56px;
+          border-radius: 50%;
+          border: none;
+          background: #2e7d32;
+          color: #fff;
+          font-size: 26px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          line-height: 1;
+          padding: 0;
+          z-index: 100000;
+        "
+      >🐾</button>
 
-        <div id="vet-chat-window" style="
-          display:none;
+      <!-- OKNO CZATU -->
+      <div
+        id="vet-chat-window"
+        style="
+          position: fixed;
+          bottom: 90px;
+          right: 20px;
           width: 340px;
-          margin-top: 10px;
           background: #ffffff;
           border-radius: 12px;
           box-shadow: 0 10px 30px rgba(0,0,0,0.25);
           overflow: hidden;
           font-family: Arial, sans-serif;
+          display: none;
+          z-index: 99999;
+        "
+      >
+        <div style="
+          background: #2e7d32;
+          color: white;
+          padding: 12px;
+          font-weight: bold;
         ">
-          <div class="header" style="
-            background: #2e7d32;
-            color: white;
-            padding: 12px;
-            font-weight: bold;
-          ">
-            Asystent Gabinetu Weterynaryjnego
-          </div>
+          Asystent Gabinetu Weterynaryjnego
+        </div>
 
-          <div id="vet-chat-messages" style="
-            height: 260px;
-            padding: 10px;
-            overflow-y: auto;
-            font-size: 14px;
-          "></div>
+        <div id="vet-chat-messages" style="
+          height: 260px;
+          padding: 10px;
+          overflow-y: auto;
+          font-size: 14px;
+        "></div>
 
-          <div class="input-area" style="
-            display: flex;
-            border-top: 1px solid #ddd;
-          ">
-            <input
-              type="text"
-              id="vet-input"
-              placeholder="W czym mogę pomóc?"
-              autocomplete="off"
-              style="
-                flex: 1;
-                border: none;
-                padding: 10px;
-                outline: none;
-              "
-            />
-            <button
-              id="vet-send"
-              style="
-                border: none;
-                background: #2e7d32;
-                color: white;
-                padding: 10px 14px;
-                cursor: pointer;
-              "
-            >Wyślij</button>
-          </div>
+        <div style="
+          display: flex;
+          border-top: 1px solid #ddd;
+        ">
+          <input
+            type="text"
+            id="vet-input"
+            placeholder="W czym mogę pomóc?"
+            autocomplete="off"
+            style="
+              flex: 1;
+              border: none;
+              padding: 10px;
+              outline: none;
+            "
+          />
+          <button
+            id="vet-send"
+            style="
+              border: none;
+              background: #2e7d32;
+              color: white;
+              padding: 10px 14px;
+              cursor: pointer;
+            "
+          >Wyślij</button>
         </div>
       </div>
-    `;
-    document.body.appendChild(wrapper);
+    `
+    );
   }
 
   // =====================================================
@@ -107,17 +113,15 @@
   let isSending = false;
 
   // =====================================================
-  // 3. TOGGLE OKNA (POPRAWIONE)
+  // 3. TOGGLE (OTWÓRZ / ZAMKNIJ)
   // =====================================================
   toggle.addEventListener("click", () => {
     const isOpen = windowChat.style.display === "block";
 
     if (isOpen) {
       windowChat.style.display = "none";
-      toggle.style.display = "flex"; // pokaż łapkę
     } else {
       windowChat.style.display = "block";
-      toggle.style.display = "none"; // ukryj łapkę
 
       if (!conversationStarted) {
         conversationStarted = true;
@@ -149,16 +153,13 @@
 
       const data = await response.json();
       replaceLastBot(data.reply);
-
-    } catch (error) {
-      replaceLastBot(
-        "Nie mogę teraz rozpocząć rozmowy. Spróbuj ponownie za chwilę."
-      );
+    } catch {
+      replaceLastBot("Nie mogę teraz rozpocząć rozmowy.");
     }
   }
 
   // =====================================================
-  // 6. WYSŁANIE WIADOMOŚCI
+  // 6. WYSYŁANIE WIADOMOŚCI
   // =====================================================
   async function sendMessage() {
     if (isSending) return;
@@ -181,21 +182,18 @@
 
       const data = await response.json();
       replaceLastBot(data.reply);
-
-    } catch (error) {
-      replaceLastBot(
-        "W tej chwili nie mogę się połączyć. Spróbuj ponownie później lub skontaktuj się z gabinetem."
-      );
+    } catch {
+      replaceLastBot("Problem z połączeniem.");
     } finally {
       isSending = false;
     }
   }
 
   // =====================================================
-  // 7. POMOCNICZE
+  // 7. UI
   // =====================================================
   function appendUser(text) {
-    messages.innerHTML += `<div class="user" style="
+    messages.innerHTML += `<div style="
       background:#e3f2fd;
       padding:8px;
       border-radius:8px;
@@ -206,7 +204,7 @@
   }
 
   function appendBot(text) {
-    messages.innerHTML += `<div class="bot" style="
+    messages.innerHTML += `<div style="
       background:#f2f2f2;
       padding:8px;
       border-radius:8px;
@@ -216,10 +214,8 @@
   }
 
   function replaceLastBot(text) {
-    const botMessages = messages.querySelectorAll(".bot");
-    if (botMessages.length > 0) {
-      botMessages[botMessages.length - 1].innerHTML = escapeHtml(text);
-    }
+    const bots = messages.querySelectorAll("div");
+    bots[bots.length - 1].innerHTML = escapeHtml(text);
     scrollDown();
   }
 
