@@ -107,15 +107,22 @@
   let isSending = false;
 
   // =====================================================
-  // 3. TOGGLE OKNA
+  // 3. TOGGLE OKNA (POPRAWIONE)
   // =====================================================
   toggle.addEventListener("click", () => {
     const isOpen = windowChat.style.display === "block";
-    windowChat.style.display = isOpen ? "none" : "block";
 
-    if (!conversationStarted && !isOpen) {
-      conversationStarted = true;
-      startConversation();
+    if (isOpen) {
+      windowChat.style.display = "none";
+      toggle.style.display = "flex"; // pokaż łapkę
+    } else {
+      windowChat.style.display = "block";
+      toggle.style.display = "none"; // ukryj łapkę
+
+      if (!conversationStarted) {
+        conversationStarted = true;
+        startConversation();
+      }
     }
   });
 
